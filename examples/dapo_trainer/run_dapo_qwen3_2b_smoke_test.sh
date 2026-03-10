@@ -1,24 +1,43 @@
 #!/usr/bin/env bash
 # DAPO smoke test: Qwen3-2B base on DAPO-17k, 2 GPUs. Runs a few steps to verify setup.
 # Usage:
+#   0. vllm (0.7.0+) is required for rollout generation. Without it you get
+#      "vllm version None not supported" and training will not start.
+#      e.g.: pip install vllm  or the pinned version: pip install vllm==0.8.4
 #   1. Set DATA_DIR to a dir containing dapo-math-17k.parquet (or set TRAIN_FILE directly).
 #   2. Optional: export CUDA_VISIBLE_DEVICES=0,1  (default: use GPU 0 and 1)
-#   3. bash examples/dapo_trainer/run_dapo_qwen3_2b_smoke_test.sh
+#   3. For wandb: pip install wandb && wandb login  (first time). Project: llm_reasoning.
+#   4. Optional: WANDB_PROJECT_NAME=xxx WANDB_EXPERIMENT_NAME=yyy bash ...  (override project/experiment name)
+#   5. bash examples/dapo_trainer/run_dapo_qwen3_2b_smoke_test.sh
 
 set -xeuo pipefail
 
-# --- 2 GPUs only (use GPU 0 and 1) ---
-export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0,1}
+# Must run from the verl project root so that python -m verl.trainer.main_ppo resolves correctly
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VERL_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+cd "${VERL_ROOT}"
+
+
+
+export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-2,3,4,5}
 NNODES=1
-NGPUS_PER_NODE=2
+NGPUS_PER_NODE=4
 
 # --- Model: Qwen3-2B base (HF id; use Qwen/Qwen2.5-2B if Qwen3-2B not available) ---
-MODEL_PATH=${MODEL_PATH:-"Qwen/Qwen2.5-2B"}
+MODEL_PATH=${MODEL_PATH:-"Qwen/Qwen3-1.7B"}
 
 # --- Data: DAPO-17k. Download from HF: BytedTsinghua-SIA/DAPO-Math-17k, then use the parquet path ---
-DATA_DIR=${DATA_DIR:-"${HOME}/data"}
+DATA_DIR=${DATA_DIR:-"${HOME}/yining/data/DAPO-Math-17k/data"}
 TRAIN_FILE=${TRAIN_FILE:-"${DATA_DIR}/dapo-math-17k.parquet"}
 VAL_FILE=${VAL_FILE:-"${TRAIN_FILE}"}
+
+
+# --- Wandb: project_name , experiment_name = ---
+WANDB_PROJECT_NAME=${WANDB_PROJECT_NAME:-llm_reasoning}
+WANDB_EXPERIMENT_NAME=${WANDB_EXPERIMENT_NAME:-qwen3-1.7b-dapo-17k-smoke}
+
+# --- Rollout (vLLM): lower utilization to avoid OOM when colocated with FSDP on 4 GPUs ---
+rollout_gpu_memory_utilization=${rollout_gpu_memory_utilization:-0.35}
 
 # --- Smoke test: minimal run ---
 train_prompt_bsz=8
@@ -60,7 +79,7 @@ python3 -m verl.trainer.main_ppo \
     data.max_prompt_length=${max_prompt_length} \
     data.max_response_length=${max_response_length} \
     data.train_batch_size=${train_prompt_bsz} \
-    data.gen_batch_size=${data_gen_batch_size} \
+    +data.gen_batch_size=${data_gen_batch_size} \
     data.train_max_samples=64 \
     actor_rollout_ref.rollout.n=${n_resp_per_prompt} \
     algorithm.adv_estimator=${adv_estimator} \
@@ -71,9 +90,9 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.clip_ratio_low=${clip_ratio_low} \
     actor_rollout_ref.actor.clip_ratio_high=${clip_ratio_high} \
     actor_rollout_ref.actor.loss_agg_mode=${loss_agg_mode} \
-    algorithm.filter_groups.enable=${enable_filter_groups} \
-    algorithm.filter_groups.metric=${filter_groups_metric} \
-    algorithm.filter_groups.max_num_gen_batches=${max_num_gen_batches} \
+    +algorithm.filter_groups.enable=${enable_filter_groups} \
+    +algorithm.filter_groups.metric=${filter_groups_metric} \
+    +algorithm.filter_groups.max_num_gen_batches=${max_num_gen_batches} \
     actor_rollout_ref.model.path="${MODEL_PATH}" \
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
@@ -87,7 +106,8 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.grad_clip=1.0 \
     actor_rollout_ref.rollout.name=vllm \
     actor_rollout_ref.rollout.tensor_model_parallel_size=${NGPUS_PER_NODE} \
-    actor_rollout_ref.rollout.gpu_memory_utilization=0.75 \
+    actor_rollout_ref.rollout.gpu_memory_utilization=${rollout_gpu_memory_utilization} \
+    actor_rollout_ref.rollout.max_model_len=40960 \
     actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=2 \
     actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=2 \
     actor_rollout_ref.ref.fsdp_config.param_offload=True \
@@ -97,9 +117,9 @@ python3 -m verl.trainer.main_ppo \
     +reward.reward_kwargs.overlong_buffer_cfg.penalty_factor=${overlong_penalty_factor} \
     +reward.reward_kwargs.overlong_buffer_cfg.log=False \
     +reward.reward_kwargs.max_resp_len=${max_response_length} \
-    trainer.logger=console \
-    trainer.project_name=verl-dapo-smoke \
-    trainer.experiment_name=qwen3-2b-dapo-17k-smoke \
+    trainer.logger='["console","wandb"]' \
+    trainer.project_name="${WANDB_PROJECT_NAME}" \
+    trainer.experiment_name="${WANDB_EXPERIMENT_NAME}" \
     trainer.n_gpus_per_node=${NGPUS_PER_NODE} \
     trainer.nnodes=${NNODES} \
     trainer.val_before_train=${trainer_val_before_train} \
@@ -107,4 +127,4 @@ python3 -m verl.trainer.main_ppo \
     trainer.total_epochs=${total_epochs} \
     trainer.total_training_steps=${total_training_steps} \
     trainer.resume_mode=disable \
-    "$@"
+
