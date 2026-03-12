@@ -140,9 +140,6 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.entropy_coeff=0 \
     actor_rollout_ref.actor.grad_clip=1.0 \
     actor_rollout_ref.rollout.name=vllm \
-    actor_rollout_ref.rollout.trace.backend=weave \
-    actor_rollout_ref.rollout.trace.token2text=True \
-    actor_rollout_ref.rollout.trace.max_samples_per_step_per_worker=5 \
     actor_rollout_ref.rollout.tensor_model_parallel_size=${rollout_tp_size} \
     actor_rollout_ref.rollout.gpu_memory_utilization=${rollout_gpu_memory_utilization} \
     actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=${log_prob_micro_batch_size_per_gpu} \
