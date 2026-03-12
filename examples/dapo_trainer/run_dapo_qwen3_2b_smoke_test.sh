@@ -19,16 +19,18 @@ cd "${VERL_ROOT}"
 
 
 
-export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-2,3,4,5}
+export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-4,5}
 NNODES=1
-NGPUS_PER_NODE=4
+NGPUS_PER_NODE=2
 
 # --- Model: Qwen3-2B base (HF id; use Qwen/Qwen2.5-2B if Qwen3-2B not available) ---
 MODEL_PATH=${MODEL_PATH:-"Qwen/Qwen3-1.7B"}
 
 # --- Data: DAPO-17k. Download from HF: BytedTsinghua-SIA/DAPO-Math-17k, then use the parquet path ---
-DATA_DIR=${DATA_DIR:-"${HOME}/yining/data/DAPO-Math-17k/data"}
-TRAIN_FILE=${TRAIN_FILE:-"${DATA_DIR}/dapo-math-17k.parquet"}
+# DATA_DIR=${DATA_DIR:-"${HOME}/yining/data/DAPO-Math-17k/data"}
+# TRAIN_FILE=${TRAIN_FILE:-"${DATA_DIR}/dapo-math-17k.parquet"}
+DATA_DIR=${DATA_DIR:-"${HOME}/yining/data/DAPO-Math-17k-Processed/data"}
+TRAIN_FILE=${TRAIN_FILE:-"${DATA_DIR}/dapo-math-17k-processed.parquet"}
 VAL_FILE=${VAL_FILE:-"${TRAIN_FILE}"}
 
 

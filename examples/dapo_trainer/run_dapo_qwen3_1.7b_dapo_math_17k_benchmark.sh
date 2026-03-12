@@ -41,12 +41,9 @@ NGPUS_PER_NODE=2
 
 # ========================== Model & Data ====================================
 MODEL_PATH=${MODEL_PATH:-"Qwen/Qwen3-1.7B"}
-# DATA_DIR=${DATA_DIR:-"${HOME}/yining/data/DAPO-Math-17k-Processed/data"}
-# TRAIN_FILE=${TRAIN_FILE:-"${DATA_DIR}/dapo-math-17k-processed.parquet"}
-# VAL_FILE=${VAL_FILE:-"${TRAIN_FILE}"}
-DATA_DIR=${DATA_DIR:-"${HOME}/yining/data/gsm8k"}
-TRAIN_FILE=${TRAIN_FILE:-"${DATA_DIR}/train.parquet"}
-VAL_FILE=${VAL_FILE:-"${DATA_DIR}/test.parquet"}
+DATA_DIR=${DATA_DIR:-"${HOME}/yining/data/DAPO-Math-17k-Processed/data"}
+TRAIN_FILE=${TRAIN_FILE:-"${DATA_DIR}/dapo-math-17k-processed.parquet"}
+VAL_FILE=${VAL_FILE:-"${TRAIN_FILE}"}
 
 # ========================== Wandb ===========================================
 WANDB_PROJECT_NAME=${WANDB_PROJECT_NAME:-llm_reasoning}
@@ -57,11 +54,11 @@ WANDB_EXPERIMENT_NAME=${WANDB_EXPERIMENT_NAME:-qwen3-1.7b-dapo-gsm8k}
 #   train_batch_size=512, ppo_mini_batch_size=32, n=16, max_resp=20480
 # Scaled for 4 GPU: batch halved, mini_batch halved, ratio preserved (16 grad steps)
 train_prompt_bsz=${TRAIN_BSZ:-128}
-n_resp_per_prompt=16
+n_resp_per_prompt=8
 train_prompt_mini_bsz=8
 # Reduce micro batch to avoid OOM when vLLM + FSDP share 2 GPUs (H200)
-ppo_micro_batch_size_per_gpu=8
-log_prob_micro_batch_size_per_gpu=16
+ppo_micro_batch_size_per_gpu=4
+log_prob_micro_batch_size_per_gpu=8
 max_prompt_length=1024
 max_response_length=${MAX_RESP_LEN:-512}
 
@@ -97,7 +94,7 @@ dataloader_num_workers=${DATALOADER_NUM_WORKERS:-0}
 
 # ========================== vLLM Rollout ====================================
 rollout_tp_size=${ROLLOUT_TP:-2}
-rollout_gpu_memory_utilization=${GPU_MEM_UTIL:-0.5}
+rollout_gpu_memory_utilization=${GPU_MEM_UTIL:-0.75}
 
 # ========================== Logging =========================================
 LOG_DIR="${VERL_ROOT}/logs"
@@ -131,6 +128,9 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.model.path="${MODEL_PATH}" \
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
+    actor_rollout_ref.model.lora_rank=64 \
+    actor_rollout_ref.model.lora_alpha=128 \
+    actor_rollout_ref.model.target_modules=all-linear \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.actor.ppo_mini_batch_size=${train_prompt_mini_bsz} \
     actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=${ppo_micro_batch_size_per_gpu} \
@@ -140,17 +140,12 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.entropy_coeff=0 \
     actor_rollout_ref.actor.grad_clip=1.0 \
     actor_rollout_ref.rollout.name=vllm \
-    actor_rollout_ref.rollout.trace.backend=weave \
-    actor_rollout_ref.rollout.trace.token2text=True \
-    actor_rollout_ref.rollout.trace.max_samples_per_step_per_worker=5 \
     actor_rollout_ref.rollout.tensor_model_parallel_size=${rollout_tp_size} \
     actor_rollout_ref.rollout.gpu_memory_utilization=${rollout_gpu_memory_utilization} \
     actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=${log_prob_micro_batch_size_per_gpu} \
     actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=${log_prob_micro_batch_size_per_gpu} \
     actor_rollout_ref.ref.fsdp_config.param_offload=True \
     reward.reward_manager.name=dapo \
-    reward.custom_reward_function.name=compute_score \
-    reward.custom_reward_function.path=${VERL_ROOT}/verl/utils/reward_score/gsm8k.py \
     +reward.reward_kwargs.method=strict \
     +reward.reward_kwargs.overlong_buffer_cfg.enable=${enable_overlong_buffer} \
     +reward.reward_kwargs.overlong_buffer_cfg.len=${overlong_buffer_len} \

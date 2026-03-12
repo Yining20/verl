@@ -20,6 +20,7 @@ This trainer supports model-agonistic model initialization with huggingface
 
 import json
 import os
+import resource
 import uuid
 from collections import defaultdict
 from copy import deepcopy
@@ -338,6 +339,31 @@ class RayPPOTrainer:
             collate_fn = default_collate_fn
 
         num_workers = self.config.data["dataloader_num_workers"]
+        # #region agent log
+        _batch_size = self.config.data.get("gen_batch_size", self.config.data.train_batch_size)
+        try:
+            _rss_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
+        except Exception:
+            _rss_mb = -1.0
+        _log_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", ".cursor", "debug-8417bc.log")
+        try:
+            with open(_log_path, "a") as _f:
+                _f.write(
+                    json.dumps(
+                        {
+                            "sessionId": "8417bc",
+                            "hypothesisId": "H1_H3",
+                            "location": "ray_trainer.py:dataloader_creation",
+                            "message": "DataLoader config and main process RSS",
+                            "data": {"num_workers": num_workers, "batch_size": _batch_size, "rss_mb": _rss_mb},
+                            "timestamp": __import__("time").time(),
+                        }
+                    )
+                    + "\n"
+                )
+        except Exception:
+            pass
+        # #endregion
 
         self.train_dataloader = StatefulDataLoader(
             dataset=self.train_dataset,
@@ -1282,6 +1308,30 @@ class RayPPOTrainer:
 
         for epoch in range(current_epoch, self.config.trainer.total_epochs):
             for batch_dict in self.train_dataloader:
+                # #region agent log
+                try:
+                    _rss_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
+                except Exception:
+                    _rss_mb = -1.0
+                _log_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", ".cursor", "debug-8417bc.log")
+                try:
+                    with open(_log_path, "a") as _f:
+                        _f.write(
+                            json.dumps(
+                                {
+                                    "sessionId": "8417bc",
+                                    "hypothesisId": "H2_H5",
+                                    "location": "ray_trainer.py:train_loop_step",
+                                    "message": "Start step, main process RSS",
+                                    "data": {"global_steps": self.global_steps, "rss_mb": _rss_mb},
+                                    "timestamp": __import__("time").time(),
+                                }
+                            )
+                            + "\n"
+                        )
+                except Exception:
+                    pass
+                # #endregion
                 if hasattr(self.actor_rollout_wg, "async_calls_finalize_fn_exec"):
                     self.actor_rollout_wg.async_calls_finalize_fn_exec(blocking=False)
                 metrics = {}

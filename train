@@ -1,0 +1,61 @@
++++ dirname examples/dapo_trainer/run_dapo_qwen3_1.7b_benchmark.sh
+++ cd examples/dapo_trainer
+++ pwd
++ SCRIPT_DIR=/home/li.12312/yining/verl/examples/dapo_trainer
+++ cd /home/li.12312/yining/verl/examples/dapo_trainer/../..
+++ pwd
++ VERL_ROOT=/home/li.12312/yining/verl
++ cd /home/li.12312/yining/verl
++ export CUDA_VISIBLE_DEVICES=0,2
++ CUDA_VISIBLE_DEVICES=0,2
++ NNODES=1
++ NGPUS_PER_NODE=2
++ MODEL_PATH=Qwen/Qwen3-1.7B
++ DATA_DIR=/home/li.12312/yining/data/DAPO-Math-17k-Processed/data
++ TRAIN_FILE=/home/li.12312/yining/data/DAPO-Math-17k-Processed/data/dapo-math-17k-processed.parquet
++ VAL_FILE=/home/li.12312/yining/data/DAPO-Math-17k-Processed/data/dapo-math-17k-processed.parquet
++ WANDB_PROJECT_NAME=llm_reasoning
++ WANDB_EXPERIMENT_NAME=qwen3-1.7b-dapo-17k
++ train_prompt_bsz=128
++ n_resp_per_prompt=8
++ train_prompt_mini_bsz=8
++ ppo_micro_batch_size_per_gpu=4
++ log_prob_micro_batch_size_per_gpu=8
++ max_prompt_length=1024
++ max_response_length=8192
++ adv_estimator=grpo
++ use_kl_in_reward=False
++ kl_coef=0.0
++ use_kl_loss=False
++ kl_loss_coef=0.0
++ clip_ratio_low=0.2
++ clip_ratio_high=0.28
++ loss_agg_mode=token-mean
++ enable_overlong_buffer=True
++ overlong_buffer_len=2048
++ overlong_penalty_factor=1.0
++ enable_filter_groups=True
++ filter_groups_metric=seq_reward
++ max_num_gen_batches=10
++ total_epochs=10
++ save_freq=100
++ test_freq=-1
++ dataloader_num_workers=0
++ rollout_tp_size=2
++ rollout_gpu_memory_utilization=0.75
++ LOG_DIR=/home/li.12312/yining/verl/logs
++ mkdir -p /home/li.12312/yining/verl/logs
+++ date +%Y%m%d_%H%M%S
++ LOG_FILE=/home/li.12312/yining/verl/logs/train_log_20260311_130221.log
++ echo 'Logging to: /home/li.12312/yining/verl/logs/train_log_20260311_130221.log'
+Logging to: /home/li.12312/yining/verl/logs/train_log_20260311_130221.log
++ tee -a /home/li.12312/yining/verl/logs/train_log_20260311_130221.log
++ python3 -m verl.trainer.main_ppo data.train_files=/home/li.12312/yining/data/DAPO-Math-17k-Processed/data/dapo-math-17k-processed.parquet data.dataloader_num_workers=0 data.val_files=/home/li.12312/yining/data/DAPO-Math-17k-Processed/data/dapo-math-17k-processed.parquet data.prompt_key=prompt data.truncation=left data.max_prompt_length=1024 data.max_response_length=8192 data.train_batch_size=128 data.filter_overlong_prompts=True actor_rollout_ref.rollout.n=8 algorithm.adv_estimator=grpo algorithm.use_kl_in_reward=False algorithm.kl_ctrl.kl_coef=0.0 actor_rollout_ref.actor.use_kl_loss=False actor_rollout_ref.actor.kl_loss_coef=0.0 actor_rollout_ref.actor.clip_ratio_low=0.2 actor_rollout_ref.actor.clip_ratio_high=0.28 actor_rollout_ref.actor.loss_agg_mode=token-mean +algorithm.filter_groups.enable=True +algorithm.filter_groups.metric=seq_reward +algorithm.filter_groups.max_num_gen_batches=10 actor_rollout_ref.model.path=Qwen/Qwen3-1.7B actor_rollout_ref.model.use_remove_padding=True actor_rollout_ref.model.enable_gradient_checkpointing=True actor_rollout_ref.actor.optim.lr=1e-6 actor_rollout_ref.actor.ppo_mini_batch_size=8 actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=4 actor_rollout_ref.actor.fsdp_config.param_offload=False actor_rollout_ref.actor.fsdp_config.optimizer_offload=False actor_rollout_ref.actor.fsdp_config.fsdp_size=2 actor_rollout_ref.actor.entropy_coeff=0 actor_rollout_ref.actor.grad_clip=1.0 actor_rollout_ref.rollout.name=vllm actor_rollout_ref.rollout.tensor_model_parallel_size=2 actor_rollout_ref.rollout.gpu_memory_utilization=0.75 actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=8 actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=8 actor_rollout_ref.ref.fsdp_config.param_offload=True actor_rollout_ref.model.lora_rank=64 actor_rollout_ref.model.lora_alpha=128 actor_rollout_ref.model.target_modules=all-linear reward.reward_manager.name=dapo +reward.reward_kwargs.overlong_buffer_cfg.enable=True +reward.reward_kwargs.overlong_buffer_cfg.len=2048 +reward.reward_kwargs.overlong_buffer_cfg.penalty_factor=1.0 +reward.reward_kwargs.overlong_buffer_cfg.log=False +reward.reward_kwargs.max_resp_len=8192 'trainer.logger=["console","wandb"]' trainer.project_name=llm_reasoning trainer.experiment_name=qwen3-1.7b-dapo-17k trainer.n_gpus_per_node=2 trainer.nnodes=1 trainer.val_before_train=False trainer.save_freq=100 trainer.test_freq=-1 trainer.total_epochs=10 trainer.resume_mode=disable
+Traceback (most recent call last):
+  File "<frozen runpy>", line 189, in _run_module_as_main
+  File "<frozen runpy>", line 112, in _get_module_details
+  File "/local/scratch/yining/verl/verl/__init__.py", line 21, in <module>
+    from .protocol import DataProto
+  File "/local/scratch/yining/verl/verl/protocol.py", line 28, in <module>
+    import numpy as np
+ModuleNotFoundError: No module named 'numpy'
