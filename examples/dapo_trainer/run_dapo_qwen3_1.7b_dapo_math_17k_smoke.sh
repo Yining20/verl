@@ -1,32 +1,8 @@
 #!/usr/bin/env bash
 # ============================================================================
-# DAPO Benchmark: Qwen3-1.7B base on DAPO-Math-17k, 4x H200 GPUs
+# DAPO Benchmark: Qwen3-1.7B base on DAPO-Math-17k
 # ============================================================================
-# Hyperparameters follow DAPO (Yu et al., 2025) and arxiv:2506.01939 Sec 5.2.
-# Scaled for fast research iteration: ~1 day per run on 4x H200.
-#
-# Training math (default settings):
-#   dataset ≈ 17,398 prompts
-#   train_batch_size = 256 prompts
-#   steps_per_epoch  = ceil(17398 / 256) = 68
-#   total_epochs     = 10  →  total_steps ≈ 680
-#   grad_steps/step  = train_batch_size / ppo_mini_batch_size = 256 / 16 = 16
-#   responses/step   = train_batch_size × n_resp = 256 × 16 = 4096
-#
-# Usage:
-#   bash examples/dapo_trainer/run_dapo_qwen3_1.7b_benchmark.sh
-#
-# Override any default via env vars:
-#   MODEL_PATH=Qwen/Qwen3-4B WANDB_EXPERIMENT_NAME=qwen3-4b-dapo \
-#     bash examples/dapo_trainer/run_dapo_qwen3_1.7b_benchmark.sh
-#
-#   MAX_RESP_LEN=8192 TOTAL_EPOCHS=15 \
-#     bash examples/dapo_trainer/run_dapo_qwen3_1.7b_benchmark.sh
-#
-# Append extra hydra overrides as positional args:
-#   bash examples/dapo_trainer/run_dapo_qwen3_1.7b_benchmark.sh \
-#     +algorithm.my_param=True
-# ============================================================================
+
 
 set -xeuo pipefail
 
@@ -35,35 +11,29 @@ VERL_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 cd "${VERL_ROOT}"
 
 # ========================== Hardware ========================================
-export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0,2}
+export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0,4}
 NNODES=1
 NGPUS_PER_NODE=2
 
 # ========================== Model & Data ====================================
 MODEL_PATH=${MODEL_PATH:-"Qwen/Qwen3-1.7B"}
-# DATA_DIR=${DATA_DIR:-"${HOME}/yining/data/DAPO-Math-17k-Processed/data"}
-# TRAIN_FILE=${TRAIN_FILE:-"${DATA_DIR}/dapo-math-17k-processed.parquet"}
-# VAL_FILE=${VAL_FILE:-"${TRAIN_FILE}"}
-DATA_DIR=${DATA_DIR:-"${HOME}/yining/data/gsm8k"}
-TRAIN_FILE=${TRAIN_FILE:-"${DATA_DIR}/train.parquet"}
-VAL_FILE=${VAL_FILE:-"${DATA_DIR}/test.parquet"}
+DATA_DIR=${DATA_DIR:-"${VERL_ROOT}/data"}
+TRAIN_FILE=${TRAIN_FILE:-"${DATA_DIR}/DAPO-Math-17k-Processed/data/dapo-math-17k-processed.parquet"}
+VAL_FILE=${VAL_FILE:-"${DATA_DIR}/aime-2024/aime-2024-verl.parquet"}
 
 # ========================== Wandb ===========================================
 WANDB_PROJECT_NAME=${WANDB_PROJECT_NAME:-llm_reasoning}
-WANDB_EXPERIMENT_NAME=${WANDB_EXPERIMENT_NAME:-qwen3-1.7b-dapo-gsm8k}
+WANDB_EXPERIMENT_NAME=${WANDB_EXPERIMENT_NAME:-qwen3-1.7b-dapo-math-17k-smoke}
 
 # ========================== Batch & Sequence ================================
-# Paper reference (arxiv:2506.01939):
-#   train_batch_size=512, ppo_mini_batch_size=32, n=16, max_resp=20480
-# Scaled for 4 GPU: batch halved, mini_batch halved, ratio preserved (16 grad steps)
-train_prompt_bsz=${TRAIN_BSZ:-128}
-n_resp_per_prompt=16
-train_prompt_mini_bsz=8
-# Reduce micro batch to avoid OOM when vLLM + FSDP share 2 GPUs (H200)
-ppo_micro_batch_size_per_gpu=8
-log_prob_micro_batch_size_per_gpu=16
+train_prompt_bsz=8
+n_resp_per_prompt=2
+train_prompt_mini_bsz=4
+
+ppo_micro_batch_size_per_gpu=4
+log_prob_micro_batch_size_per_gpu=8
 max_prompt_length=1024
-max_response_length=${MAX_RESP_LEN:-512}
+max_response_length=${MAX_RESP_LEN:-8192}
 
 # ========================== DAPO Algorithm ==================================
 # Matches DAPO paper exactly: GRPO, no KL, asymmetric clip, token-mean loss
@@ -87,10 +57,10 @@ filter_groups_metric=seq_reward
 max_num_gen_batches=10
 
 # ========================== Training Schedule ===============================
-total_epochs=${TOTAL_EPOCHS:-10}
-save_freq=${SAVE_FREQ:-100}
+total_epochs=1
+save_freq=100
 # Disable validation (test_freq=-1) to avoid RuntimeError in agent_loop when val prompts have different lengths
-test_freq=${TEST_FREQ:--1}
+test_freq=5
 
 # ========================== DataLoader (reduce workers to avoid CPU OOM) ====
 dataloader_num_workers=${DATALOADER_NUM_WORKERS:-0}
@@ -116,6 +86,7 @@ python3 -m verl.trainer.main_ppo \
     data.max_response_length=${max_response_length} \
     data.train_batch_size=${train_prompt_bsz} \
     data.filter_overlong_prompts=True \
+    trainer.total_training_steps=10 \
     actor_rollout_ref.rollout.n=${n_resp_per_prompt} \
     algorithm.adv_estimator=${adv_estimator} \
     algorithm.use_kl_in_reward=${use_kl_in_reward} \
@@ -146,8 +117,6 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=${log_prob_micro_batch_size_per_gpu} \
     actor_rollout_ref.ref.fsdp_config.param_offload=True \
     reward.reward_manager.name=dapo \
-    reward.custom_reward_function.name=compute_score \
-    reward.custom_reward_function.path=${VERL_ROOT}/verl/utils/reward_score/gsm8k.py \
     +reward.reward_kwargs.method=strict \
     +reward.reward_kwargs.overlong_buffer_cfg.enable=${enable_overlong_buffer} \
     +reward.reward_kwargs.overlong_buffer_cfg.len=${overlong_buffer_len} \
